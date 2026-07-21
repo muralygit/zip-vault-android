@@ -49,8 +49,15 @@ import com.example.ui.ZipSortType
 import com.example.ui.ZipViewModel
 import com.example.ui.ZipViewModelFactory
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var viewModel: ZipViewModel
@@ -115,6 +122,9 @@ fun ZipVaultDashboard(
     // Dialog States
     var showEditTagsDialogForFile by remember { mutableStateOf<ZipFileEntity?>(null) }
     var showDeleteConfirmDialogForFile by remember { mutableStateOf<ZipFileEntity?>(null) }
+    var showExportVaultDialog by remember { mutableStateOf(false) }
+    var isCompressingBackup by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
     
     // Sort Menu State
     var showSortMenu by remember { mutableStateOf(false) }
@@ -173,19 +183,43 @@ fun ZipVaultDashboard(
                         )
                     }
                     
-                    // Stats pill
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "${uiState.zipFiles.size} Files",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        if (uiState.zipFiles.isNotEmpty()) {
+                            IconButton(
+                                onClick = { showExportVaultDialog = true },
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .size(40.dp)
+                                    .testTag("export_vault_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share / Export Vault",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Stats pill
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "${uiState.zipFiles.size} Files",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
@@ -574,6 +608,154 @@ fun ZipVaultDashboard(
             }
         )
     }
+
+    // 3. Export Vault Dialog
+    if (showExportVaultDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isCompressingBackup) showExportVaultDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Backup,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("Export Vault Archives", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Choose how you want to share or export all ${uiState.zipFiles.size} archives currently stored in your Zip Vault:",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    if (isCompressingBackup) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Preparing consolidated ZIP archive...",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        // Option 1: Share separate files (Batch)
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showExportVaultDialog = false
+                                    shareVaultAsMultipleFiles(context, uiState.zipFiles)
+                                }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Send as Multiple Files (Batch)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Share individual files directly to Telegram, WhatsApp, Gmail, etc.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Option 2: Share single consolidated ZIP
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    isCompressingBackup = true
+                                    coroutineScope.launch {
+                                        val backupFile = withContext(Dispatchers.IO) {
+                                            createVaultBackup(context, uiState.zipFiles)
+                                        }
+                                        isCompressingBackup = false
+                                        showExportVaultDialog = false
+                                        if (backupFile != null) {
+                                            shareBackupZip(context, backupFile)
+                                        }
+                                    }
+                                }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Export Single Consolidated ZIP",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Pack all vault archives together. Ideal for backing up or downloading to a pendrive.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                if (!isCompressingBackup) {
+                    TextButton(onClick = { showExportVaultDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -801,4 +983,91 @@ private fun formatDate(timestamp: Long): String {
 // Simple non-blocking delay implementation using Coroutines
 private suspend fun delay(timeMs: Long) {
     kotlinx.coroutines.delay(timeMs)
+}
+
+private fun shareVaultAsMultipleFiles(context: Context, zipFiles: List<ZipFileEntity>) {
+    try {
+        val authority = "com.aistudio.zipvault.qkzpqr.fileprovider"
+        val uris = ArrayList<Uri>()
+        for (zipFile in zipFiles) {
+            val file = File(zipFile.filePath)
+            if (file.exists()) {
+                val contentUri = FileProvider.getUriForFile(context, authority, file)
+                uris.add(contentUri)
+            }
+        }
+
+        if (uris.isEmpty()) return
+
+        val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "application/zip"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "Share all archives via"))
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private fun createVaultBackup(context: Context, zipFiles: List<ZipFileEntity>): File? {
+    return try {
+        val vaultDir = File(context.filesDir, "vault_zips")
+        val backupDir = File(vaultDir, "backups")
+        if (!backupDir.exists()) {
+            backupDir.mkdirs()
+        }
+
+        // Clean up previous backup files to save storage space
+        backupDir.listFiles()?.forEach { file ->
+            try { file.delete() } catch (e: Exception) {}
+        }
+
+        val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+        val timestamp = formatter.format(Date())
+        val backupFile = File(backupDir, "Zip_Vault_Backup_$timestamp.zip")
+
+        ZipOutputStream(FileOutputStream(backupFile)).use { zos ->
+            for (zipFileEntity in zipFiles) {
+                val file = File(zipFileEntity.filePath)
+                if (file.exists()) {
+                    FileInputStream(file).use { fis ->
+                        val entryName = zipFileEntity.name
+                        val zipEntry = ZipEntry(entryName)
+                        zos.putNextEntry(zipEntry)
+
+                        val buffer = ByteArray(8 * 1024)
+                        var bytes = fis.read(buffer)
+                        while (bytes >= 0) {
+                            zos.write(buffer, 0, bytes)
+                            bytes = fis.read(buffer)
+                        }
+                        zos.closeEntry()
+                    }
+                }
+            }
+        }
+        backupFile
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+private fun shareBackupZip(context: Context, backupFile: File) {
+    try {
+        val authority = "com.aistudio.zipvault.qkzpqr.fileprovider"
+        val contentUri = FileProvider.getUriForFile(context, authority, backupFile)
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "Save or share backup via"))
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
 }
