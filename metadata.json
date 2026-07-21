@@ -1,0 +1,6 @@
+{
+  "name": "Zip Vault",
+  "description": "A premium, offline-first ZIP file manager to store, organize, and share ZIP archives securely.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
