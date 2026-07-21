@@ -10,5 +10,6 @@ data class ZipFileEntity(
     val filePath: String,
     val size: Long,
     val dateAdded: Long = System.currentTimeMillis(),
-    val tags: String = ""
+    val tags: String = "",
+    val note: String = ""
 )

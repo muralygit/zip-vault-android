@@ -122,6 +122,7 @@ fun ZipVaultDashboard(
     // Dialog States
     var showEditTagsDialogForFile by remember { mutableStateOf<ZipFileEntity?>(null) }
     var showDeleteConfirmDialogForFile by remember { mutableStateOf<ZipFileEntity?>(null) }
+    var showEditNoteDialogForFile by remember { mutableStateOf<ZipFileEntity?>(null) }
     var showExportVaultDialog by remember { mutableStateOf(false) }
     var isCompressingBackup by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -471,7 +472,8 @@ fun ZipVaultDashboard(
                             zipFile = zipFile,
                             onShare = { shareZipOut(context, zipFile) },
                             onDelete = { showDeleteConfirmDialogForFile = zipFile },
-                            onEditTags = { showEditTagsDialogForFile = zipFile }
+                            onEditTags = { showEditTagsDialogForFile = zipFile },
+                            onEditNote = { showEditNoteDialogForFile = zipFile }
                         )
                     }
                 }
@@ -560,6 +562,71 @@ fun ZipVaultDashboard(
             dismissButton = {
                 TextButton(
                     onClick = { showEditTagsDialogForFile = null }
+                ) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.outline)
+                }
+            }
+        )
+    }
+
+    // 1.5 Edit Note Dialog
+    showEditNoteDialogForFile?.let { zipFile ->
+        var tempNote by remember { mutableStateOf(zipFile.note) }
+        
+        AlertDialog(
+            onDismissRequest = { showEditNoteDialogForFile = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Description,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("Add / Edit Note", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Add a brief note or description against \"${zipFile.name}\" to remember its contents:",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    OutlinedTextField(
+                        value = tempNote,
+                        onValueChange = { if (it.length <= 200) tempNote = it },
+                        placeholder = { Text("Enter a brief note (e.g. Contains quarterly reports)") },
+                        maxLines = 4,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("note_input"),
+                        supportingText = {
+                            Text(
+                                text = "${tempNote.length}/200",
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateNote(zipFile, tempNote)
+                        showEditNoteDialogForFile = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showEditNoteDialogForFile = null }
                 ) {
                     Text("Cancel", color = MaterialTheme.colorScheme.outline)
                 }
@@ -764,6 +831,7 @@ fun ZipFileCard(
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onEditTags: () -> Unit,
+    onEditNote: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -836,6 +904,58 @@ fun ZipFileCard(
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
+                    }
+
+                    // Brief Note Section
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (zipFile.note.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f))
+                                .clickable { onEditNote() }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = "Note icon",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = zipFile.note,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { onEditNote() }
+                                .padding(vertical = 2.dp, horizontal = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Create,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Add brief note",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             }

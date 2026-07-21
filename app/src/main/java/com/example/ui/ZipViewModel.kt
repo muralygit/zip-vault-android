@@ -61,7 +61,11 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
         val filtered = if (query.isBlank()) {
             rawFiles
         } else {
-            rawFiles.filter { it.name.contains(query, ignoreCase = true) || it.tags.contains(query, ignoreCase = true) }
+            rawFiles.filter { 
+                it.name.contains(query, ignoreCase = true) || 
+                it.tags.contains(query, ignoreCase = true) ||
+                it.note.contains(query, ignoreCase = true)
+            }
         }
 
         // Sort files
@@ -122,6 +126,13 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
         viewModelScope.launch {
             repository.updateZipFile(zipFile.copy(tags = newTags))
             _statusMessage.value = "Tags updated for \"${zipFile.name}\""
+        }
+    }
+
+    fun updateNote(zipFile: ZipFileEntity, newNote: String) {
+        viewModelScope.launch {
+            repository.updateZipFile(zipFile.copy(note = newNote))
+            _statusMessage.value = "Note updated for \"${zipFile.name}\""
         }
     }
 
