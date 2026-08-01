@@ -23,4 +23,7 @@ interface ZipDao {
 
     @Query("SELECT * FROM zip_files WHERE id = :id")
     suspend fun getZipFileById(id: Int): ZipFileEntity?
+
+    @Query("SELECT * FROM zip_files WHERE name = :name AND size = :size LIMIT 1")
+    suspend fun findByNameAndSize(name: String, size: Long): ZipFileEntity?
 }
