@@ -29,7 +29,8 @@ data class ZipUiState(
     val sortType: ZipSortType = ZipSortType.DATE_DESC,
     val isLoading: Boolean = false,
     val statusMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val duplicateFileName: String? = null
 )
 
 class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
@@ -39,6 +40,10 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _duplicateFileName = MutableStateFlow<String?>(null)
+
+    // Holds the Uri awaiting confirmation while a duplicate-file dialog is shown to the user.
+    private var pendingImportUri: Uri? = null
 
     // Combine raw repository list with query and sorting logic
     val uiState: StateFlow<ZipUiState> = combine(
@@ -47,7 +52,8 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
         _sortType,
         _isLoading,
         _statusMessage,
-        _errorMessage
+        _errorMessage,
+        _duplicateFileName
     ) { flows ->
         @Suppress("UNCHECKED_CAST")
         val rawFiles = flows[0] as List<ZipFileEntity>
@@ -56,6 +62,7 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
         val loading = flows[3] as Boolean
         val status = flows[4] as String?
         val error = flows[5] as String?
+        val duplicateName = flows[6] as String?
         
         // Filter files
         val filtered = if (query.isBlank()) {
@@ -84,7 +91,8 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
             sortType = sort,
             isLoading = loading,
             statusMessage = status,
-            errorMessage = error
+            errorMessage = error,
+            duplicateFileName = duplicateName
         )
     }.stateIn(
         scope = viewModelScope,
@@ -111,15 +119,48 @@ class ZipViewModel(private val repository: ZipRepository) : ViewModel() {
     fun importZip(context: Context, uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true
-            repository.importZipFile(context, uri)
-                .onSuccess { savedFile ->
-                    _statusMessage.value = "Successfully imported \"${savedFile.name}\" to Vault"
-                }
-                .onFailure { error ->
-                    _errorMessage.value = "Failed to import ZIP: ${error.localizedMessage ?: "Unknown error"}"
-                }
-            _isLoading.value = false
+            val duplicate = repository.checkForDuplicate(context, uri)
+            if (duplicate != null) {
+                // Pause here and let the user decide via the dialog.
+                pendingImportUri = uri
+                _duplicateFileName.value = duplicate.name
+                _isLoading.value = false
+            } else {
+                performImport(context, uri)
+            }
         }
+    }
+
+    /**
+     * Called when the user chooses "Import Anyway" on the duplicate-file dialog.
+     */
+    fun confirmDuplicateImport(context: Context) {
+        val uri = pendingImportUri ?: return
+        pendingImportUri = null
+        _duplicateFileName.value = null
+        viewModelScope.launch {
+            _isLoading.value = true
+            performImport(context, uri)
+        }
+    }
+
+    /**
+     * Called when the user cancels the duplicate-file dialog.
+     */
+    fun cancelDuplicateImport() {
+        pendingImportUri = null
+        _duplicateFileName.value = null
+    }
+
+    private suspend fun performImport(context: Context, uri: Uri) {
+        repository.importZipFile(context, uri)
+            .onSuccess { savedFile ->
+                _statusMessage.value = "Successfully imported \"${savedFile.name}\" to Vault"
+            }
+            .onFailure { error ->
+                _errorMessage.value = "Failed to import ZIP: ${error.localizedMessage ?: "Unknown error"}"
+            }
+        _isLoading.value = false
     }
 
     fun updateTags(zipFile: ZipFileEntity, newTags: String) {
