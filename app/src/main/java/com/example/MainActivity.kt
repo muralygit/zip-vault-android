@@ -634,6 +634,45 @@ fun ZipVaultDashboard(
         )
     }
 
+    // 1.75 Duplicate File Confirmation Dialog
+    uiState.duplicateFileName?.let { duplicateName ->
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelDuplicateImport() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.FolderZip,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("File Already Exists", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    text = "A file named \"$duplicateName\" with the same size already exists in your vault. Do you want to import it anyway as a separate copy?",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmDuplicateImport(context) },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Import Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.cancelDuplicateImport() }
+                ) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.outline)
+                }
+            }
+        )
+    }
+
     // 2. Delete Confirmation Dialog
     showDeleteConfirmDialogForFile?.let { zipFile ->
         AlertDialog(
