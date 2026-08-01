@@ -26,6 +26,22 @@ class ZipRepository(private val zipDao: ZipDao) {
     }
 
     /**
+     * Checks whether a ZIP file with the same name and size already exists in the vault.
+     * Returns the existing matching entity, or null if no duplicate was found.
+     */
+    suspend fun checkForDuplicate(context: Context, uri: Uri): ZipFileEntity? {
+        return withContext(Dispatchers.IO) {
+            val (name, size) = getUriMetadata(context, uri)
+            if (size <= 0) {
+                // Can't reliably compare without a known size; skip duplicate check.
+                null
+            } else {
+                zipDao.findByNameAndSize(name, size)
+            }
+        }
+    }
+
+    /**
      * Imports a ZIP file from a Uri (either shared in or picked by document picker).
      * Copies the file to internal storage and creates a database record.
      */
